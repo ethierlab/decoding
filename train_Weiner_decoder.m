@@ -38,14 +38,9 @@ end
 
 %% Inputs & Outputs
 inputs  = double(cat_data_from_bin_table(binnedData,params.inputs,params.trials));
-
-inputs = DuplicateAndShift(inputs,params.numlags);
-mx = mean(inputs); 
 inputs = detrend(inputs,'constant');
 
 outputs = double(cat_data_from_bin_table(binnedData,params.outputs,params.trials));
-my = mean(outputs);
-outputs = detrend(outputs,'constant');
 num_out = size(outputs,2);
 
 
