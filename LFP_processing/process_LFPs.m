@@ -23,7 +23,7 @@ vhgb = fir1(filter_order, vhg_band/(fs/2), 'band');
 
 for i=1:num_LFPs
     for j = 1:numtrials
-        data = detrend(LFP{i,j});
+        data = detrend(double(LFP{i,j}));
         beta{i,j} = filtfilt(bb,1,data);
         lgamma{i,j} = filtfilt(lgb,1,data);
         hgamma{i,j} = filtfilt(hgb,1,data);

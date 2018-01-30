@@ -46,7 +46,9 @@ num_out = size(outputs,2);
 
 %% Calculate Decoder
 
-W = train_decoder(inputs,outputs,params);
+% W = train_decoder(inputs,outputs,params);
+
+W = filMIMO4(inputs,outputs,params.numlags,1,1);
 
 % % W_temp = inputs\outputs;
 % % % add back input and output means in first row:
@@ -56,6 +58,8 @@ W = train_decoder(inputs,outputs,params);
 % % end
 
 [data_fit, inputs_trim, outputs_trim] = predMIMO4(inputs,W,outputs);
+
+
 
 %% Then, add non-linearity if applicable
 
