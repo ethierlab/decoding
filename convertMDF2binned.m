@@ -13,7 +13,7 @@ function binnedData = convertMDF2binned(datatable,varargin)
 %                                   structure, any missing field will be
 %                                   set to its default value.
 %
-%             binsize             : [0.05]   desired bin size in 
+%             binsize             : [0.05]   desired bin size in seconds
 %             pre_capture         : [0.5]    duration of pre-trial recording
 %             HP, LP              : [50 10]  high pass and low pass cut off frequencies for EMG filtering
 %             NormData            : [false]  specify whether the output data is to be normalized to unity
@@ -89,8 +89,9 @@ LFP_fs   = fs{1,strncmpi('LFP',fs_names,3)};
     trial_dur   = cell(num_trials,1);
     timeframe   = cell(num_trials,1);
 
-    LFPs = process_LFPs(datatable{LFP_i,:},LFP_fs);
-     
+    if process_data_flag(strcmp(data_types,'LFP'))
+        LFPs = process_LFPs(datatable{LFP_i,:},LFP_fs);
+    end
     
 %%  Trial per trial, extract and bin all data into new cells
 
