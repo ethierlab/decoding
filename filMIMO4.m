@@ -34,12 +34,15 @@ elseif (nargin ~=5) disp('Wrong number of inputs');return;end
 	%return
     %end
     
-  [rX,cX]= size(X); [rY,cY]= size(Y);
+  [rX,cX]= size(X); 
+  [rY,cY]= size(Y);
   numio=cX+cY;
 
-  mx = mean(X); my = mean(Y);
+  mx = mean(X); 
+  my = mean(Y);
   % adding the constant flag to the detrend code - just removes the mean.
-  X= detrend(X, 'constant'); Y=detrend(Y, 'constant');
+  X= detrend(X, 'constant'); 
+  Y=detrend(Y, 'constant');
 
   R=covf([X Y],numlags);
 
