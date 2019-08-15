@@ -2,8 +2,17 @@
 % 1. Use SimpleSpikeDataProcessor to save channel data as .mat.
 %    IMPORTANT: Save these .mat files in the same folder as TDT block/datatank location.
 % 
-% 2. Run this script
-%     
+% 2. Run TDT2VAF
+% 
+% INPUTS:
+%   BLOCKPATH            : TDT datatank directory
+%
+% Dialoguebox:
+%   - Hold time          : Mototrak hold time until reward
+%   - numfolds           : number of k-folds to be used in cross-validation
+%   - numlags            : number of datasets which are stacked and shifted across
+%   - zero_wind          : bin size of the zero window for eliminating zero force
+%
 % OUTPUTS:
 %   data2_SSDP           : same as data2 made from Michael code; TDT data is read
 %                          and organized into a table containing trial types,
@@ -21,7 +30,7 @@
 %
 %    session_time        : date and time
 %
-%    vaf_per_fold        : vector of Variance Accounted For (VAF) per fold
+%    vaf_per_fold        : Variance Accounted For (VAF) per fold
 %
 %    mean_vaf            : mean of vaf_per_fold
 %
@@ -34,8 +43,23 @@
 %%%%%%%%%%%% ethierlab - ME, VK, CE 08-2019 %%%%%%%%%%%%%%%%%%%
 
 %% TDT2mat_et_waveculs_fonction.m
+
 % Directory of TDT block location
 BLOCKPATH = uigetdir('/Users/christianethier/Google Drive (Work)/Projects/Chronic Array and Mototrak/sample data/jados-19-04-30-am','Select TDT data block');
+
+% Create dialoguebox for VAF calculator settings
+prompt = {'Hold time (s)'; 'Number of folds (K-value):'; 'Number of lags:'; 'Zero-force bin size to remove:'};
+dlg_title = 'VAF Input';
+dims = [1 40; 1 40; 1 40; 1 40];
+definput = {'0'; '10'; '5'; '10'};
+dialoguebox = inputdlg(prompt, dlg_title, dims, definput);
+
+hold_time = str2double(dialoguebox{1,1});
+numfolds = str2double(dialoguebox{2,1});
+numlags = str2double(dialoguebox{3,1});
+zero_wind = str2double(dialoguebox{4,1});
+
+loading = waitbar(0,'Extracting data from TDT datatank...');
 
 % Extracts data from all channels in 'spik' storage
 spikes = TDTbin2mat(BLOCKPATH, 'TYPE', {'all'});
@@ -55,8 +79,6 @@ fs{1,3} = spikes.streams.Lfp1.fs;
 fs{1,4} = spikes.streams.spik.fs;
 
 %% trial_extraction_main_function.m + trig2event.m
-
-hold_time = 0.8;
 
 % Extract events from TDT
 events = trig2event(spikes.epocs.Bev_.onset);
@@ -141,6 +163,8 @@ for v = 1:size(lfp_data,1)
     lfp_channels{v}=['LFP' num2str(v)];
 end
 
+waitbar(0.33, loading, 'Loading chandata folder...')
+
 %Find folder containing channel data within TDT datank folder
 try
     cd([BLOCKPATH '\chandata'])
@@ -162,9 +186,9 @@ for i = 1:chan_size
     end
 end
 
-% Final row names
+% Row names
 row = [{'trial_type','successful/unsuccessful','time2succes',...
-        'FORCE','EMG1','EMG2','EMG3'},lfp_channels,'ch_mu'];   
+        'FORCE','EMG1','EMG2','EMG3'},lfp_channels,'ch_clusters_mu'];   
 data1_SSDP = cell2table(data1_SSDP, 'RowNames', row, 'VariableNames', trial_names);
 
 % fs column names
@@ -247,7 +271,13 @@ params.binsize = bin_size;
 
 binnedData = extraire_bins_pour_force_et_clusters(data2_SSDP,fs,'tout','initiation',params);
 
-force_pred_mototrak(binnedData);
+waitbar(0.66, loading, 'Calculating VAF...')
+
+force_pred_mototrak(binnedData,'numfolds',numfolds,'numlags',numlags,'zero_wind',zero_wind);
+
+fprintf('\nMean VAF: %d\n', mean_vaf)
+fprintf('\nStdev VAF: %d\n', stdev_vaf)
+waitbar(1, loading, 'Calculations complete!!!')
 
 %% Clear vars
 clearvars -except data2_SSDP binnedData fs hold_time serial_session_time session_time mean_vaf stdev_vaf vaf_per_fold act_force pred_force
