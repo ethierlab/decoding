@@ -22,7 +22,7 @@ function varargout = vaf_calculator_2000(varargin)
 
 % Edit the above text to modify the response to help vaf_calculator_2000
 
-% Last Modified by GUIDE v2.5 25-Jul-2019 19:09:15
+% Last Modified by GUIDE v2.5 05-Aug-2019 12:44:41
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -201,7 +201,7 @@ if any(is_empty ~= 0)
 end
 
 % If data2 has not been converted...
-if max(data2{4,1}{:}) < 5
+if max(data2{4,1}{:}) < 20
     message = msgbox('Converting analogue forces to grams...','Loading');
     data2 = force_analog2grams(data2,handles.loaded_data.fs);
 end
@@ -367,13 +367,15 @@ set(handles.sd_vaf, 'string', std(vaf(:,2)));
 
 axes(handles.force_figure);
 % Plot actual force
-plot(act_force(1:200),'-k');
+plot(act_force,'-k');
 xlabel('Bins')
+xlim([1 200])
 ylabel('Force (g)')
 
 hold on
 % Plot predicted force
-plot(pred_force(1:200),'-r');
+plot(pred_force,'-r');
+xlim([1 200])
 legend('Actual force','Predicted force')
 
 hold off
@@ -447,7 +449,7 @@ if isempty(handles.binnedData)
     return
 end
 
-numfolds = 10;
+numfolds = str2double(get(handles.numfolds_custom, 'string'));
 numlags = 10;
 zero_wind = 20;
 extra = 9;
@@ -482,8 +484,230 @@ set(handles.zero_custom,'string',max_zero_wind)
 waitbar(1, loading, 'Calculations complete!');
 
 
-% --- Executes on button press in pushbutton6.
-function pushbutton6_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton6 (see GCBO)
+% --- Executes on button press in bulk_calculator.
+function bulk_calculator_Callback(hObject, eventdata, handles)
+% hObject    handle to bulk_calculator (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+prompt = {'Number of folds (K-value):'; 'Number of lags:'; 'Zero-force bin size to remove:'};
+dlg_title = 'Input';
+
+numfolds_temp = get(handles.numfolds_custom, 'string');
+numlags_temp = get(handles.numlags_custom, 'string');
+zero_wind_temp = get(handles.zero_custom, 'string');
+
+dims = [1 40; 1 40; 1 40];
+
+definput = {numfolds_temp; numlags_temp; zero_wind_temp};
+dialoguebox = inputdlg(prompt, dlg_title, dims, definput);
+
+vaf_settings.numfolds = str2double(dialoguebox{1,1});
+vaf_settings.numlags = str2double(dialoguebox{2,1});
+vaf_settings.zero_wind = str2double(dialoguebox{3,1});
+
+bin_size = 0.05; % seconds; set bin size used during data acquisition
+params.binsize = bin_size;
+
+%% Find matlab files
+folder = uigetdir; % retrieve folder path
+directories = dir(fullfile(folder,'**\*.mat')); % finds matlab files in specified folder
+directories = directories(~[directories.isdir]); % removes first "." and ".." entries which are not directories
+
+%% Data processing and calculating VAF
+data2Summary = struct(...
+    'Name',[],...
+    'Date',[],...
+    'Period',[],...
+    'CNO',[],...
+    'Sound',[],...
+    'Force_Threshold',[],...
+    'Hold_Time',[],...
+    'VAF',[]);
+
+progress = 0;
+loading = waitbar(progress,'Calculating...'); % loading bar
+for ii = 1:length(directories)
+    try % in case anything goes wrong...
+        
+        loaded_data = load(directories(ii).name);
+        
+        if isfield(loaded_data, 'data2')
+            
+            % Find empty columns in data2
+            is_empty = zeros(size(loaded_data,2));
+            for var = 1: size(loaded_data.data2,2)
+                is_empty(var,1) = isempty(loaded_data.data2{4,var}{:});
+            end
+            if any(is_empty ~= 0) % crashes w/o if b/c right-hand side ~= 0
+                loaded_data.data2 = removevars(loaded_data.data2,loaded_data.data2.Properties.VariableNames{(is_empty)});
+            end
+            
+            % Extract rat name...
+            name = regexp(directories(ii).name, '^\w+(-\d-\d)?','match');
+            if ~isempty(name)
+                data2Summary(ii).Name = name{:};
+            end
+            
+            % ... and the date.
+            date = regexp(directories(ii).name, '^\w+-\d+-\d+.(\d+-\d+-\d+).*\.mat$','tokens');
+            if ~isempty(date) % crashes w/o if b/c date might not exist
+                data2Summary(ii).Date = date{:};
+                
+            end
+            % Extract period (AM/PM)
+            if contains(directories(ii).folder,'am')
+                data2Summary(ii).Period = 'AM';
+            elseif contains(directories(ii).folder,'pm')
+                data2Summary(ii).Period = 'PM';
+            end
+            
+            data2Summary(ii).CNO= contains(directories(ii).folder,'avec_cno'); % Extract CNO
+            data2Summary(ii).Sound = contains(directories(ii).folder,'avec_sons'); % Extract
+            
+            % Extract force (20gr/80gr/100gr)
+            if contains(directories(ii).folder, '20gr')
+                data2Summary(ii).Force_Threshold = 20;
+            elseif contains(directories(ii).folder,'80gr')
+                data2Summary(ii).Force_Threshold = 80;
+            elseif contains(directories(ii).folder,'100gr')
+                data2Summary(ii).Force_Threshold = 100;
+            else
+                data2Summary(ii).Force_Threshold = NaN;
+            end
+            
+            % Extract hold time (500ms/800ms)
+            if contains(directories(ii).folder, '500ms')
+                data2Summary(ii).Hold_Time = 500;
+            elseif contains(directories(ii).folder, '800ms')
+                data2Summary(ii).Hold_Time = 800;
+            else
+                data2Summary(ii).Hold_Time = NaN;
+            end
+            
+            % Convert analogue to force
+            if max(loaded_data.data2{4,1}{:}) < 20
+                loaded_data.data2 = force_analog2grams(loaded_data.data2, loaded_data.fs);
+            end
+            
+            % Create binnedData
+            binnedData = extraire_bins_pour_force_et_clusters(loaded_data.data2,loaded_data.fs,'tout','initiation',params);
+            
+            % Calculate VAF
+            num_trials = size(binnedData,1);
+            all_trials = 1:num_trials;
+            processed_spikes = cell(num_trials,1);
+            processed_force = cell(num_trials,1);
+            
+            vaf = zeros(vaf_settings.numfolds,1);
+            
+            if num_trials < vaf_settings.numfolds
+                data2Summary(ii).VAF = NaN; % N/A since K-folds cannot work if sample size too small
+            else
+                for t = 1:num_trials
+                    spikes = cell2mat(binnedData.spike_bin(t,:));
+                    spikes = DuplicateAndShift(spikes,vaf_settings.numlags);
+                    spikes = spikes(vaf_settings.numlags:end,:);
+                    force = binnedData.force_bin{t}(vaf_settings.numlags:end);
+                    
+                    % Remove data where moving average of force is zero
+                    valid_idx = movmean(force,vaf_settings.zero_wind) > 2; % 2 is arbitrary and can be changed
+                    processed_force{t} = force(valid_idx);
+                    processed_spikes{t} = spikes(valid_idx,:);
+                end
+                
+                num_test_trials = floor(num_trials/vaf_settings.numfolds);
+                
+                for f = 1:vaf_settings.numfolds
+                    test_trials = (1:num_test_trials) + (f-1) * num_test_trials;
+                    train_trials = all_trials(~ismember(all_trials,test_trials));
+                    
+                    inputs = vertcat(processed_spikes{train_trials});
+                    outputs = vertcat(processed_force{train_trials});
+                    
+                    % Train decoder
+                    W = filMIMO4(inputs, outputs, 1,1,1);
+                    
+                    % Test decoder
+                    test_spikes = vertcat(processed_spikes{test_trials});
+                    test_force = vertcat(processed_force{test_trials});
+                    
+                    pred_force_temp = predMIMO4(test_spikes, W, test_force);
+                    
+                    % Calculate VAF
+                    vaf(f) = calc_vaf(pred_force_temp, test_force);
+                    data2Summary(ii).VAF = mean(vaf);
+                end
+            end
+        end
+        
+    catch
+        data2Summary(ii).VAF = []; % if anything goes wrong in the loop...
+    end
+    
+    waitbar((progress+(ii/length(directories))),loading,'Calculating...')
+end
+
+waitbar(1,loading,{'Complete!'; 'Please see MATLAB workspace.'})
+
+% Remove empty rows
+empty_idx = arrayfun(@(s) all(structfun(@ isempty,s)),data2Summary);
+data2Summary = data2Summary(~empty_idx);
+
+%% Rearrange into separate struct for individual rats
+
+% Find and store the different rat names
+col = 1;
+for ii = 2:size(data2Summary,2)
+    if all(data2Summary(ii).Name == data2Summary(ii-1).Name)
+        name{1,col} = data2Summary(ii).Name;
+    elseif ~all(data2Summary(ii).Name == data2Summary(ii-1).Name)
+        col = col + 1;
+    end
+end
+
+% Find rat_start and rat_end in data2Summary that corresponds to index for different rats
+compareTable = cell(size(data2Summary,2),1);
+for kk = 2:size(data2Summary,2)
+    compareTable{1,1} = 0;
+    compareTable{kk,1} = strncmpi(data2Summary(kk).Name, data2Summary(kk-1).Name,7);
+    
+    if ~strncmpi(data2Summary(kk).Name, data2Summary(kk-1).Name,7)
+        compareTable{kk-1,1} = 2; % value for last rat so that we can index it
+    end
+end
+
+rat_start = find([compareTable{:}] == 0); % new rat is when compareTable == 0
+rat_end = find([compareTable{:}] == 2); % last rat is when compareTable == 2
+rat_end(:,end + 1) = size(data2Summary,2); % index for end of last rat
+
+% Create new data structure with sorted information
+for jj = 1:numel(name)
+    %field names don't work on '-' so we have to strrep
+    rats.(strrep(name{jj},'-','_')) = struct(...
+        'Date', {data2Summary(rat_start(jj):rat_end(jj)).Date},...
+        'Period', {data2Summary(rat_start(jj):rat_end(jj)).Period},...
+        'CNO', {data2Summary(rat_start(jj):rat_end(jj)).CNO},...
+        'Sound', {data2Summary(rat_start(jj):rat_end(jj)).Sound},...
+        'Force_Threshold', {data2Summary(rat_start(jj):rat_end(jj)).Force_Threshold},...
+        'Hold_Time', {data2Summary(rat_start(jj):rat_end(jj)).Hold_Time},...
+        'VAF', {data2Summary(rat_start(jj):rat_end(jj)).VAF});
+    
+    % Sort by date and period
+    date_num = datenum([rats.(strrep(name{jj},'-','_')).Date],'dd-mm-yy');
+    
+    for i = 1:length([rats.(strrep(name{jj},'-','_')).Date])
+        if [rats.(strrep(name{jj},'-','_')).Period](i) == 'PM';
+            date_num(i) = date_num(i) + 0.5;
+        end
+    end
+    
+    [~,date_index] = sortrows(date_num);
+    rats.(strrep(name{jj},'-','_')) = rats.(strrep(name{jj},'-','_'))(date_index);
+end
+
+assignin('base', 'data2Summary', data2Summary)
+assignin('base', 'rat_list', rats)
+assignin('base', 'bin_size', bin_size)
+assignin('base', 'directories', directories)
+assignin('base', 'vaf_settings', vaf_settings)

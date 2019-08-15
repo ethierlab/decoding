@@ -24,10 +24,11 @@ function [vaf, act_force, pred_force] = force_pred_mototrak(binned_data,varargin
 %% Argument handling
 
 % Default parameters
-params = struct('numfolds'         ,10, ... %sets 10 as default if params is not passed
-                'numlags'          , 5,  ...
-                'zero_wind'        ,10);
-            
+params = struct(...
+    'numfolds'         ,10, ... %sets 10 as default if params is not passed
+    'numlags'          , 5,  ...
+    'zero_wind'        ,10);
+
 params = parse_input_params(params,varargin);
 
 
@@ -62,16 +63,16 @@ end
 
 %num_test_trials = num_trials - num_train_trials;
 
-num_test_trials  = (num_trials - mod(num_trials,params.numfolds))/params.numfolds; % 6; size of each training set
+num_test_trials  = floor(num_trials/params.numfolds);% 6; size of each training set
 
 for f = 1:params.numfolds
     
-    test_trials = (1:num_test_trials)+(f-1)*num_test_trials; %from 1,2,3,4,5,6 to 6,7,8,9,10,11,12...
+    test_trials = (1:num_test_trials)+(f-1)*num_test_trials; %from 1,2,3,4,5,6 to 7,8,9,10,11,12,13...
     train_trials = all_trials(~ismember(all_trials,test_trials)); %this will shift forward through all_trials by one set (6) each loop according to test_trial
     
     inputs  = vertcat(processed_spikes{train_trials}); %vertically concatenates processed_spikes (where train_trials are located); 2778x105 double
     outputs = vertcat(processed_force {train_trials}); %vertically concatenates processed_force (where train_trials are located); 2778x1 double
-     
+    
     % train decoder
     W = filMIMO4(inputs,outputs,1,1,1); %inputs = columnwise input X, outputs = columnwise input Y. But why is params.numlags = 1??
     
@@ -83,25 +84,23 @@ for f = 1:params.numfolds
     
     % calc vaf
     vaf(f) = calc_vaf(pred_force_temp,test_force); %this will calculate the model's performance
-
+    
     pred_force = [pred_force; pred_force_temp];
     
     %fprintf('fold %d :  vaf = %.2f\n',f, vaf(f));
-   
+    
     
 end
 
-%fprintf('\nmean vaf: %.2f\n',nanmean(vaf));
-%fprintf('stdev vaf: %.2f\n',nanstd(vaf));
-
-
-%act_force = vertcat(processed_force{:});
+assignin('base','vaf_per_fold', vaf)
+assignin('base','mean_vaf', nanmean(vaf))
+assignin('base','stdev_vaf', nanstd(vaf))
+assignin('base','act_force',vertcat(processed_force{:}))
+assignin('base','pred_force',pred_force)
 
 
 % plot(act_force(1:200))
 % hold on
 % plot (pred_force(1:200))
 % hold off
-    
-   
 
