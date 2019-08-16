@@ -175,20 +175,25 @@ end
 
 % Load data but ignore fs variable - it will overwrite our current fs table
 index = 8 + chan_size;
+k = 1;
+ch_name = cell(1,length(chan_size));
+
 for i = 1:chan_size
-    load_name = ['ch' num2str(i) '_snips.mat'];
-    load (load_name, '-regexp', '^(?!fs$).')
+    load_file = ['ch' num2str(i) '_snips.mat'];
+    load (load_file, '-regexp', '^(?!fs$).')
     
     for n = 1:numel(trial_start_time)
-    data1_SSDP{index,n} = intersect(...
+    data1_SSDP{index - 1 + i,n} = intersect(...
         (round (trial_start_time(n)*fs{1,4}):round(trial_end_time(n)*fs{1,4})), ...
         round(ts*fs{1,4})) - (round(trial_start_time(n)*fs{1,4})-1);
     end
+    
+    ch_name{i} = ['ch' num2str(i) '_mu'];
 end
 
 % Row names
 row = [{'trial_type','successful/unsuccessful','time2succes',...
-        'FORCE','EMG1','EMG2','EMG3'},lfp_channels,'ch_clusters_mu'];   
+        'FORCE','EMG1','EMG2','EMG3'},lfp_channels,ch_name];   
 data1_SSDP = cell2table(data1_SSDP, 'RowNames', row, 'VariableNames', trial_names);
 
 % fs column names
