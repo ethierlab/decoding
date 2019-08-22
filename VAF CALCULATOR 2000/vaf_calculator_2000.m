@@ -22,7 +22,7 @@ function varargout = vaf_calculator_2000(varargin)
 
 % Edit the above text to modify the response to help vaf_calculator_2000
 
-% Last Modified by GUIDE v2.5 05-Aug-2019 12:44:41
+% Last Modified by GUIDE v2.5 22-Aug-2019 09:37:24
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
